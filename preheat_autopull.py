@@ -32,11 +32,17 @@ b.load_data(start_date, end_date, res)
 
 # make list of sensors and actuators
 sensor_names = []
+sensor_data = []
 for b_unit in b.units.values():
     for unit in b_unit:
         if unit.components:
             for component in unit.components:
+                # component.load_data(start_date, end_date, res)
+                # data are found in building unit as columns
                 sensor_names.append(component.tag)
+                sensor_data.append(component.data)
         if unit.sub_units:
             for sub_unit in unit.sub_units:
+                sub_unit.load_data(start_date, end_date, res)
                 sensor_names.append(sub_unit.name)
+                sensor_data.append(sub_unit.data)
