@@ -6,6 +6,7 @@ Created on Fri Oct  8 14:14:56 2021
 """
 import os
 import pandas as pd
+import datetime as dt
 import preheat_open as ph
 import TimeKeeper
 TK = TimeKeeper.TimeKeeper()  # make TimeKeeper object to handle datetimes and schedules
@@ -50,29 +51,63 @@ b = ph.Building(b_id)
 
 
 # make data directory for today
+# create directory for time in data not for when data was pulled
 dirname = TK.get_now_local().strftime("%Y-%m-%d")
-if not(os.path.isdir(dirname)):
+if not os.path.isdir(dirname):
+    # create directory
     os.mkdir(dirname)
-    print("Directory created: "+dirname+"!")
+    print("Directory created: "+dirname)
 
 
 # make datetimes for data interval
-delay = 60*60*24  # time delay in seconds
-start_date = TK.get_now_local_delay(-delay)  # start time of the data query
-end_date = TK.get_now_local()  # end/stop time of the data query
+now = TK.get_now_local()  # datetime now
+delay = 60*60*24
+start_date = TK.get_now_local_delay(-delay)
+day_start = dt.datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=now.tzinfo)  # start time of the data query
+
+end_date = now  # end/stop time of the data query
 resolutions = ["raw", "minute", "hour"]  # resolutions to queue
 
 for res in resolutions:
+
     # get data for given res
     [sensor_names, sensor_data] = get_data_from_building_object(b, start_date, end_date, res)
-
     # make dataframe for saving
     data = pd.DataFrame()
+    data.index.name = "TIME"
     for (name, sensor) in zip(sensor_names, sensor_data):
         data[name] = sensor
 
-    # save resolution data
-    filename = dirname+"/"+res+".csv"
-    if not(os.path.isfile(filename)):
+    # data = [data[data.index < day_start], data[data.index >= day_start]]
+    # for data in data:
+    #     if not data.empty:
+    #         date = data.index[-1].strftime("%Y-%m-%d")
+
+    filename = dirname+"/"+res+".csv"  # filename for the given resolution
+    DATA_EXISTS = os.path.isfile(filename)
+
+    # load old data
+    old_data = pd.DataFrame()
+    new_data = pd.DataFrame()
+    if DATA_EXISTS:
+        old_data = pd.read_csv(filename, index_col=data.index.name)
+        if not old_data.empty:
+            # add missing timestamps
+            old_time = old_data.index[-1]
+            # new_data = dem der ikke er i old_data
+            new_data = data[data.index > old_time]
+            # add missing columns
+            for column in list(old_data.columns):
+                if column not in list(data.columns):
+                    new_data[column] = old_data[column]
+
+    if not DATA_EXISTS:
         data.to_csv(filename)
-        print("file saved: "+filename+"!")
+        print(str(len(data))+" line"+["", "s"][len(data) > 1]+" added to "+filename)
+    else:
+        if new_data.empty:
+            print("no new data for time resolution "+res)
+        else:
+            # save resolution data
+            new_data.to_csv(filename, mode="a", header=False)
+            print(str(len(new_data))+" line"+["", "s"][len(new_data) > 1]+" appended to "+filename)
