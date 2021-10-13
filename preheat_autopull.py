@@ -6,7 +6,6 @@ Created on Fri Oct  8 14:14:56 2021
 """
 import os
 import pandas as pd
-import datetime as dt
 import preheat_open as ph
 import TimeKeeper
 TK = TimeKeeper.TimeKeeper()  # make TimeKeeper object to handle datetimes and schedules
@@ -42,6 +41,15 @@ def get_data_from_building_object(b, start_date, end_date, res):
 
     return [sensor_names, sensor_data]
 
+
+# %% create directory for data
+
+
+data_dir = "data"
+if not os.path.isdir(data_dir):
+    os.mkdir(data_dir)
+    print("Created directory: "+data_dir)
+
 # %%
 
 
@@ -50,64 +58,57 @@ b_id = 2245
 b = ph.Building(b_id)
 
 
-# make data directory for today
-# create directory for time in data not for when data was pulled
-dirname = TK.get_now_local().strftime("%Y-%m-%d")
-if not os.path.isdir(dirname):
-    # create directory
-    os.mkdir(dirname)
-    print("Directory created: "+dirname)
-
-
 # make datetimes for data interval
-now = TK.get_now_local()  # datetime now
-delay = 60*60*24
-start_date = TK.get_now_local_delay(-delay)
-day_start = dt.datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=now.tzinfo)  # start time of the data query
-
-end_date = now  # end/stop time of the data query
+end_date = TK.get_now_local()  # when to start the query
+qu_interval = 60*60*24  # time interval of the query
+start_date = TK.get_now_local_delay(-qu_interval)  # when to stop the query
 resolutions = ["raw", "minute", "hour"]  # resolutions to queue
 
 for res in resolutions:
-
     # get data for given res
     [sensor_names, sensor_data] = get_data_from_building_object(b, start_date, end_date, res)
-    # make dataframe for saving
-    data = pd.DataFrame()
-    data.index.name = "TIME"
+
+    data = pd.DataFrame()  # make dataframe for saving
+    data.index.name = "TIME"  # change the name of the index to TIME
     for (name, sensor) in zip(sensor_names, sensor_data):
-        data[name] = sensor
+        data[name] = sensor  # merge the sensor names and data into dataframe
 
-    # data = [data[data.index < day_start], data[data.index >= day_start]]
-    # for data in data:
-    #     if not data.empty:
-    #         date = data.index[-1].strftime("%Y-%m-%d")
-
-    filename = dirname+"/"+res+".csv"  # filename for the given resolution
-    DATA_EXISTS = os.path.isfile(filename)
-
-    # load old data
-    old_data = pd.DataFrame()
-    new_data = pd.DataFrame()
-    if DATA_EXISTS:
-        old_data = pd.read_csv(filename, index_col=data.index.name)
-        if not old_data.empty:
-            # add missing timestamps
-            old_time = old_data.index[-1]
-            # new_data = dem der ikke er i old_data
-            new_data = data[data.index > old_time]
-            # add missing columns
-            for column in list(old_data.columns):
-                if column not in list(data.columns):
-                    new_data[column] = old_data[column]
-
-    if not DATA_EXISTS:
-        data.to_csv(filename)
-        print(str(len(data))+" line"+["", "s"][len(data) > 1]+" added to "+filename)
+    if data.empty:
+        print('No data for resolution "'+res+'" in interval')
     else:
-        if new_data.empty:
-            print("no new data for time resolution "+res)
-        else:
-            # save resolution data
-            new_data.to_csv(filename, mode="a", header=False)
-            print(str(len(new_data))+" line"+["", "s"][len(new_data) > 1]+" appended to "+filename)
+        # split data
+        split_data = []  # create list to hold multiple dataframes
+        for day in set(data.index.day):
+            split_data.append(data[data.index.day == day])  # split data into days
+
+        # check if there are old data for each day
+        for day in split_data:
+            dirname = data_dir+"/"+day.index[0].strftime("%Y-%m-%d")  # directory name for the day
+            filename = dirname+"/"+res+".csv"  # filename for the given resolution
+            data_exists = os.path.isfile(filename)  # check if a file exists for the day and resolution
+
+            # load old data
+            old_data = pd.DataFrame()  # create DataFrame for existing data
+            new_data = pd.DataFrame()  # create DataFrame for new data
+            new_set = False
+            if data_exists:
+                old_data = pd.read_csv(filename, index_col=day.index.name)  # read existing data from file
+                if not old_data.empty:  # check if file did include data
+                    new_data = day[day.index > old_data.index[-1]]  # filter only data after the last timestamp in file
+                    new_set = not(bool(len(day.columns == old_data.columns)))  # are there added or missing columns
+
+            # make directory
+            if not os.path.isdir(dirname):  # check if directory exists
+                os.mkdir(dirname)  # create directory
+                print("Created directory: "+dirname)
+
+            # save new data
+            if data_exists:
+                if new_data.empty:
+                    print("No new data for "+dirname[len(data_dir)+1::]+" at time resolution "+res)
+                else:
+                    new_data.to_csv(filename, mode="a", header=new_set)  # append data to existig file
+                    print(str(len(new_data))+" line"+["", "s"][len(new_data) > 1]+" appended to "+filename)
+            else:
+                day.to_csv(filename)  # create new file with data
+                print(str(len(day))+" line"+["", "s"][len(day) > 1]+" saved to "+filename)
