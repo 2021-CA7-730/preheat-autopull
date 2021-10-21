@@ -4,14 +4,15 @@ Created on Fri Oct  8 14:14:56 2021
 
 @author: Jan Peter Mortensen Christiansen
 """
-import Monkey  # monkey patch preheat_open.Unit.load_data()
+import Monkey
 import os
 import pandas as pd
 import preheat_open as ph
 import TimeKeeper
-TK = TimeKeeper.TimeKeeper()  # make TimeKeeper object to handle datetimes and schedules
+Monkey.patch_Unit_load_data()  # monkey patch preheat_open.Unit.load_data()
+# Monkey.patch_TimeKeeer_create_schedule()  # monkey patch TimeKeeper.create_schedule()
 ph.logging.set_logging_level("warning")  # set logging level to warning
-
+TK = TimeKeeper.TimeKeeper()  # make TimeKeeper object to handle datetimes and schedules
 
 # %% function definitions
 
