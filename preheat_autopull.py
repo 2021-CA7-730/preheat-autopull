@@ -10,7 +10,6 @@ import pandas as pd
 import preheat_open as ph
 import TimeKeeper
 Monkey.patch_Unit_load_data()  # monkey patch preheat_open.Unit.load_data()
-# Monkey.patch_TimeKeeer_create_schedule()  # monkey patch TimeKeeper.create_schedule()
 ph.logging.set_logging_level("warning")  # set logging level to warning
 TK = TimeKeeper.TimeKeeper()  # make TimeKeeper object to handle datetimes and schedules
 
@@ -63,7 +62,7 @@ b = ph.Building(b_id)
 
 # make datetimes for data interval
 end_date = TK.get_now_local()  # when to start the query
-qu_interval = 60*60*24  # time interval of the query
+qu_interval = 60*60*24*7  # time interval of the query
 start_date = TK.get_now_local_delay(-qu_interval)  # when to stop the query
 resolutions = ["raw", "minute", "hour"]  # resolutions to queue
 
@@ -98,7 +97,7 @@ for res in resolutions:
                 old_data = pd.read_csv(filename, index_col=day.index.name)  # read existing data from file
                 if not old_data.empty:  # check if file did include data
                     new_data = day[day.index > old_data.index[-1]]  # filter only data after the last timestamp in file
-                    new_set = not(bool(len(day.columns == old_data.columns)))  # are there added or missing columns
+                    new_set = not(bool(len(day.columns) == len(old_data.columns)))  # are there added or missing columns
 
             # make directory
             if not os.path.isdir(dirname):  # check if directory exists
